@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D导航中心</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #0a0a1a;
+            min-height: 100vh;
+            overflow-x: hidden;
+            color: #fff;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        .main-container {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* 左侧导航栏 */
+        .sidebar {
+            width: 280px;
+            background: rgba(15, 15, 35, 0.9);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 30px 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            transition: all 0.3s;
+        }
+
+        .sidebar::-webkit-scrollbar { width: 4px; }
+        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+
+        .logo {
+            text-align: center;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .logo h1 {
+            font-size: 1.8em;
+            background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradientShift 3s ease infinite;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% { filter: hue-rotate(0deg); }
+            50% { filter: hue-rotate(30deg); }
+        }
+
+        .nav-item {
+            padding: 15px 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-item:hover, .nav-item.active {
+            background: rgba(102, 126, 234, 0.2);
+            border-left-color: #667eea;
+        }
+
+        .nav-item .icon { font-size: 1.3em; }
+        .nav-item .text { font-size: 0.95em; }
+
+        /* 右侧面板 */
+        .right-panel {
+            margin-left: 280px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 搜索头部 - 固定高度，不遮挡内容 */
+        .search-header {
+            flex-shrink: 0;
+            padding: 25px 40px;
+            background: rgba(10, 10, 26, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* 右侧内容区 */
+        .content {
+            flex: 1;
+            padding: 40px;
+            position: relative;
+            overflow-y: auto;
+        }
+
+        .search-container {
+            margin-bottom: 0;
+        }
+
+        .search-form {
+            display: flex;
+            max-width: 700px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .search-form:focus-within {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #00b7ff;
+            box-shadow: 0 0 30px rgba(0, 183, 255, 0.3);
+        }
+
+        .search-box {
+            flex: 1;
+            padding: 18px 30px;
+            font-size: 1.1em;
+            border: none;
+            background: transparent;
+            color: #fff;
+            outline: none;
+        }
+
+        .search-box::placeholder { color: rgba(255, 255, 255, 0.5); }
+
+        .search-btn {
+            padding: 18px 35px;
+            background: linear-gradient(135deg, #00b7ff, #0078d4);
+            border: none;
+            color: #fff;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .search-btn:hover {
+            background: linear-gradient(135deg, #00c8ff, #0088e8);
+        }
+
+        .search-engines {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .engine-btn {
+            padding: 8px 20px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .engine-btn:hover, .engine-btn.active {
+            background: rgba(0, 183, 255, 0.2);
+            border-color: #00b7ff;
+            color: #fff;
+        }
+
+        .category-section {
+            margin-bottom: 50px;
+            animation: fadeInUp 0.6s ease;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .category-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .category-header h2 {
+            font-size: 1.6em;
+            font-weight: 600;
+        }
+
+        .category-header .count {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+        }
+
+        /* 分栏网格 */
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .link-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 20px;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .link-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            transition: left 0.5s;
+        }
+
+        .link-card:hover::before { left: 100%; }
+
+        .link-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            background: rgba(102, 126, 234, 0.15);
+            border-color: rgba(102, 126, 234, 0.5);
+            box-shadow: 0 20px 40px rgba(102, 126, 234, 0.2);
+        }
+
+        .link-card a {
+            text-decoration: none;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .link-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(102,126,234,0.3), rgba(118,75,162,0.3));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            flex-shrink: 0;
+            transition: all 0.3s;
+        }
+
+        .link-card:hover .link-icon {
+            transform: rotate(10deg) scale(1.1);
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        .link-info { flex: 1; overflow: hidden; }
+        .link-name {
+            font-size: 1em;
+            font-weight: 500;
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .link-url {
+            font-size: 0.8em;
+            color: rgba(255, 255, 255, 0.4);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* 响应式 */
+        @media (max-width: 1024px) {
+            .sidebar { width: 220px; }
+            .right-panel { margin-left: 220px; }
+            .search-header { padding: 20px 30px; }
+            .content { padding: 30px; }
+            .links-grid {
+                grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                gap: 15px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                z-index: 100;
+                width: 260px;
+            }
+            .sidebar.open { transform: translateX(0); }
+            .right-panel { 
+                margin-left: 0;
+                height: 100vh;
+            }
+            .search-header {
+                padding: 15px 20px;
+                padding-left: 70px;
+            }
+            .content { 
+                padding: 20px; 
+            }
+            .menu-toggle { display: block; }
+            .search-form {
+                flex-direction: column;
+                border-radius: 20px;
+            }
+            .search-box {
+                padding: 15px 20px;
+                text-align: center;
+            }
+            .search-btn {
+                padding: 15px;
+                border-radius: 0 0 20px 20px;
+                justify-content: center;
+            }
+            .search-engines {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            .links-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 12px;
+            }
+            .link-card {
+                padding: 15px;
+            }
+            .link-icon {
+                width: 40px;
+                height: 40px;
+                font-size: 1.2em;
+            }
+            .link-name {
+                font-size: 0.9em;
+            }
+            .category-header h2 {
+                font-size: 1.3em;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .search-header {
+                padding: 10px 15px;
+                padding-left: 65px;
+            }
+            .content {
+                padding: 15px;
+            }
+            .links-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+            .link-card a {
+                flex-direction: column;
+                text-align: center;
+                gap: 10px;
+            }
+            .link-info {
+                width: 100%;
+            }
+            .link-url {
+                display: none;
+            }
+        }
+
+        .menu-toggle {
+            display: none;
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 101;
+            background: rgba(102, 126, 234, 0.9);
+            border: none;
+            padding: 12px 15px;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 1.2em;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            transition: all 0.3s;
+        }
+
+        .menu-toggle:hover {
+            background: rgba(102, 126, 234, 1);
+            transform: scale(1.05);
+        }
+
+        /* 遮罩层 */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 99;
+        }
+
+        .sidebar-overlay.active {
+            display: block;
+        }
+</style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <div class="main-container">
+        <nav class="sidebar" id="sidebar">
+            <div class="logo"><h1>🌌 导航中心</h1></div>
+            <div id="nav-menu"></div>
+        </nav>
+        <div class="right-panel">
+            <header class="search-header" id="searchHeader"></header>
+            <main class="content" id="content"></main>
+        </div>
+    </div>
+    <button class="menu-toggle" id="menuToggle">☰</button>
+
+    <script>
+        // 3D粒子背景
+        class Particle3D {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.particles = [];
+                this.mouse = { x: 0, y: 0 };
+                this.init();
+            }
+
+            init() {
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+                window.addEventListener('mousemove', (e) => {
+                    this.mouse.x = e.clientX;
+                    this.mouse.y = e.clientY;
+                });
+
+                for (let i = 0; i < 150; i++) {
+                    this.particles.push({
+                        x: Math.random() * this.canvas.width,
+                        y: Math.random() * this.canvas.height,
+                        z: Math.random() * 1000,
+                        vx: (Math.random() - 0.5) * 0.5,
+                        vy: (Math.random() - 0.5) * 0.5,
+                        vz: (Math.random() - 0.5) * 2,
+                        size: Math.random() * 2 + 1,
+                        color: `hsl(${Math.random() * 60 + 220}, 70%, 60%)`
+                    });
+                }
+                this.animate();
+            }
+
+            resize() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+
+            animate() {
+                this.ctx.fillStyle = 'rgba(10, 10, 26, 0.1)';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                this.particles.forEach((p, i) => {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.z += p.vz;
+
+                    if (p.z < 1) p.z = 1000;
+                    if (p.z > 1000) p.z = 1;
+
+                    const scale = 500 / p.z;
+                    const x2d = (p.x - this.canvas.width / 2) * scale + this.canvas.width / 2;
+                    const y2d = (p.y - this.canvas.height / 2) * scale + this.canvas.height / 2;
+                    const size = p.size * scale;
+
+                    if (x2d < 0) p.x = this.canvas.width;
+                    if (x2d > this.canvas.width) p.x = 0;
+                    if (y2d < 0) p.y = this.canvas.height;
+                    if (y2d > this.canvas.height) p.y = 0;
+
+                    const dx = this.mouse.x - x2d;
+                    const dy = this.mouse.y - y2d;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < 150) {
+                        p.vx -= dx * 0.0001;
+                        p.vy -= dy * 0.0001;
+                    }
+
+                    this.ctx.beginPath();
+                    this.ctx.arc(x2d, y2d, Math.max(size, 0.5), 0, Math.PI * 2);
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.globalAlpha = Math.min(1, scale);
+                    this.ctx.fill();
+
+                    // 连线
+                    this.particles.slice(i + 1).forEach(p2 => {
+                        const scale2 = 500 / p2.z;
+                        const x2d2 = (p2.x - this.canvas.width / 2) * scale2 + this.canvas.width / 2;
+                        const y2d2 = (p2.y - this.canvas.height / 2) * scale2 + this.canvas.height / 2;
+                        const d = Math.sqrt((x2d - x2d2) ** 2 + (y2d - y2d2) ** 2);
+
+                        if (d < 120) {
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(x2d, y2d);
+                            this.ctx.lineTo(x2d2, y2d2);
+                            this.ctx.strokeStyle = `rgba(102, 126, 234, ${0.3 * (1 - d / 120)})`;
+                            this.ctx.lineWidth = 0.5;
+                            this.ctx.stroke();
+                        }
+                    });
+                });
+
+                this.ctx.globalAlpha = 1;
+                requestAnimationFrame(() => this.animate());
+            }
+        }
+
+        // 初始化3D粒子
+        const canvas = document.createElement('canvas');
+        document.getElementById('canvas-container').appendChild(canvas);
+        new Particle3D(canvas);
+
+        // 网站数据
+        const categories = [
+            {
+                name: '看片',
+                icon: '🎬',
+                links: [
+                    { name: 'ZzzFun动漫', url: 'http://www.zzzfun.com/', icon: '🎭' },
+                    { name: 'NO视频', url: 'http://www.novipnoad.com/', icon: '📺' },
+                    { name: '哔哩哔哩', url: 'https://www.bilibili.com/', icon: '📱' },
+                    { name: 'AGE动漫', url: 'https://www.agefans.tv/', icon: '🎬' },
+                    { name: '电影蜜蜂', url: 'https://www.idybee.com/', icon: '🐝' },
+                    { name: '腾讯视频', url: 'https://v.qq.com/', icon: '🎥' },
+                    { name: '央视网', url: 'https://www.cctv.com/', icon: '📡' },
+                    { name: '真不卡影院', url: 'http://www.zhenbuka.fun/', icon: '🎞️' },
+                    { name: '无线论坛', url: 'https://www.anywlan.com/', icon: '📶' },
+                    { name: 'Tinkercad', url: 'https://www.tinkercad.com/', icon: '🔧' },
+                    { name: 'Gimy TV', url: 'https://gmtv1.xyz/', icon: '📺' },
+                    { name: '91BT', url: 'https://91btbt.top/', icon: '🔗' },
+                    { name: '爱达杂货铺', url: 'https://adzhp.vip/', icon: '🏪' },
+                    { name: '6v电影', url: 'https://www.hao6v.tv/', icon: '🎬' },
+                    { name: '光影资源', url: 'https://www.etdown.net/', icon: '💿' },
+                    { name: '布谷TV', url: 'https://www.bugutv.org/', icon: '📺' },
+                    { name: 'PanSou盘搜', url: 'https://so.252035.xyz/', icon: '🔍' },
+                    { name: '动漫花园', url: 'https://share.dmhy.org/', icon: '🌸' }
+                ]
+            },
+            {
+                name: '招聘网',
+                icon: '💼',
+                links: [
+                    { name: '南方人才网', url: 'https://www.job168.com/', icon: '🏢' },
+                    { name: '广铁招聘', url: 'http://gtgrs.gzrailway.com.cn:7001/', icon: '🚄' },
+                    { name: '中国铁路招聘', url: 'https://rczp.china-railway.com.cn/', icon: '🚂' },
+                    { name: '事业单位招聘', url: 'http://sydw.job168.com/', icon: '🏛️' },
+                    { name: '广州地铁招聘', url: 'https://gzmetro.zhiye.com/', icon: '🚇' },
+                    { name: '佛山轨道招聘', url: 'https://fmetroyy.zhiye.com/', icon: '🚊' }
+                ]
+            },
+            {
+                name: '编程网站',
+                icon: '💻',
+                links: [
+                    { name: '脚本之家', url: 'https://www.jb51.net/', icon: '📜' },
+                    { name: 'GitHub', url: 'https://github.com/', icon: '🐙' },
+                    { name: 'CSDN博客', url: 'https://blog.csdn.net/', icon: '📝' },
+                    { name: 'CSDN首页', url: 'https://www.csdn.net/', icon: '💻' },
+                    { name: '码农之家', url: 'https://www.xz577.com/', icon: '📚' },
+                    { name: 'W3School', url: 'https://www.w3school.com.cn/', icon: '🎓' },
+                    { name: '简单教程', url: 'https://www.twle.cn/', icon: '📖' },
+                    { name: '博客园', url: 'https://www.cnblogs.com/', icon: '🌐' },
+                    { name: 'Gitee码云', url: 'https://gitee.com/', icon: '🔧' },
+                    { name: '吾爱破解', url: 'https://www.52pojie.cn/', icon: '🔓' },
+                    { name: 'Pygame文档', url: 'https://www.pygame.org/docs/', icon: '🎮' },
+                    { name: 'Python中文网', url: 'https://www.chinapyg.com/', icon: '🐍' },
+                    { name: 'FreeBuf', url: 'https://www.freebuf.com/', icon: '🔒' },
+                    { name: '条形码生成', url: 'http://tiaoxingma.wiicha.com/', icon: '📊' },
+                    { name: 'CodePen', url: 'https://codepen.io/', icon: '✏️' },
+                    { name: 'MDN Web文档', url: 'https://developer.mozilla.org/zh-CN/', icon: '🦊' },
+                    { name: 'DoitCar固件', url: 'http://nodemcu-dev.doit.am/', icon: '⚙️' },
+                    { name: 'ECharts', url: 'https://echarts.apache.org/zh/', icon: '📈' },
+                    { name: 'UPUPW', url: 'https://www.upupw.net/', icon: '🖥️' },
+                    { name: 'SPEEDCAT', url: 'https://aff03.speedcat-aff02.com/', icon: '🚀' },
+                    { name: '清华镜像站', url: 'https://mirrors.tuna.tsinghua.edu.cn/', icon: '🎓' },
+                    { name: 'Docker教程', url: 'https://www.lvtao.net/tool/', icon: '🐳' },
+                    { name: '廉价云', url: 'https://cheapyun.com/', icon: '☁️' },
+                    { name: '1Panel', url: 'http://210.16.178.35:10009/', icon: '🖥️' }
+                ]
+            },
+            {
+                name: '美图',
+                icon: '🎨',
+                links: [
+                    { name: 'Piqsels', url: 'https://www.piqsels.com/zh', icon: '🖼️' },
+                    { name: '觅元素', url: 'http://www.51yuansu.com/', icon: '🎨' },
+                    { name: '稿定设计', url: 'https://www.gaoding.com/', icon: '✨' },
+                    { name: '极像素', url: 'https://www.sigoo.com/', icon: '📷' },
+                    { name: '兔二工具', url: 'https://www.tool2.cn/', icon: '🐰' },
+                    { name: '搜图神器', url: 'https://www.logosc.cn/so/', icon: '🔍' },
+                    { name: '改图宝', url: 'https://www.gaitubao.com/', icon: '🔧' },
+                    { name: 'Waifu2x', url: 'http://waifu2x.udp.jp/', icon: '🎭' },
+                    { name: '码力全开', url: 'https://design.maliquankai.com/', icon: '💪' },
+                    { name: '爱给网', url: 'https://www.aigei.com/', icon: '🎁' },
+                    { name: '标准地图', url: 'http://bzdt.ch.mnr.gov.cn/', icon: '🗺️' },
+                    { name: 'CG资源站', url: 'https://www.cgzyw.com/', icon: '🔌' },
+                    { name: 'LookAE', url: 'https://www.lookae.com/', icon: '🎬' },
+                    { name: '360查字体', url: 'http://fonts.safe.360.cn/', icon: '🔤' },
+                    { name: 'OpenStreetMap', url: 'https://www.openstreetmap.org/', icon: '🗺️' }
+                ]
+            },
+            {
+                name: '学习',
+                icon: '📚',
+                links: [
+                    { name: 'CAD自学网', url: 'http://www.cadzxw.com/', icon: '📐' },
+                    { name: '我要自学网', url: 'http://www.51zxw.net/', icon: '📖' },
+                    { name: '爱数控论坛', url: 'http://www.aishukong.com/', icon: '🔧' },
+                    { name: 'QQ技术导航', url: 'https://www.daohangtx.com/', icon: '🧭' },
+                    { name: '3dmax教程', url: 'http://www.3dmax8.com/', icon: '🎨' },
+                    { name: '宅站', url: 'https://www.zhaiup.com/', icon: '🏠' },
+                    { name: 'SolidWorks', url: 'http://fans.solidworks.com.cn/', icon: '⚙️' },
+                    { name: '迪威模型', url: 'http://www.3dwhere.com/', icon: '🏗️' },
+                    { name: '智慧职教MOOC', url: 'https://mooc.icve.com.cn/', icon: '🎓' },
+                    { name: '智慧职教', url: 'https://www.icve.com.cn/', icon: '💡' },
+                    { name: 'Demo3D', url: 'http://www.demo3d.cn/', icon: '🎮' },
+                    { name: '开拔网', url: 'http://www.sanweimoxing.com/', icon: '🔩' },
+                    { name: 'MATLAB论坛', url: 'http://www.matlabsky.com/', icon: '📊' },
+                    { name: 'MATLAB文档', url: 'https://ww2.mathworks.cn/help/matlab/', icon: '📈' },
+                    { name: '风派微社区', url: 'http://www.fpwsq.com/', icon: '🌪️' },
+                    { name: '中国大学MOOC', url: 'https://www.icourse163.org/', icon: '🎓' },
+                    { name: 'Wokwi模拟器', url: 'https://wokwi.com/', icon: '🔌' },
+                    { name: 'Instructables', url: 'https://www.instructables.com/', icon: '🔨' },
+                    { name: 'Consensus AI', url: 'https://consensus.app/', icon: '🤖' },
+                    { name: '计算机科学期刊', url: 'https://www.jsjkx.com/', icon: '💻' },
+                    { name: '诺贝尔和平奖', url: 'https://www.nobelpeaceprize.org/', icon: '🏆' },
+                    { name: '诺贝尔奖官网', url: 'https://www.nobelprize.org/', icon: '🥇' }
+                ]
+            },
+            {
+                name: '论文',
+                icon: '📄',
+                links: [
+                    { name: '中国知网', url: 'https://www.cnki.net/', icon: '📚' },
+                    { name: '国家哲社数据库', url: 'http://www.nssd.cn/', icon: '📖' },
+                    { name: 'Sci-Hub', url: 'https://sci-hub.st/', icon: '🔬' },
+                    { name: 'PubMed', url: 'https://pubmed.ncbi.nlm.nih.gov/', icon: '🏥' },
+                    { name: '全国图书馆联盟', url: 'http://www.ucdrs.superlib.net/', icon: '📚' },
+                    { name: '科研通', url: 'https://www.ablesci.com/', icon: '🔍' },
+                    { name: 'ChatGPT学习', url: 'https://chat.wuguokai.cn/', icon: '🤖' },
+                    { name: '小霸王游戏', url: 'https://www.yikm.net/', icon: '🎮' }
+                ]
+            },
+            {
+                name: '工具',
+                icon: '🛠️',
+                links: [
+                    { name: '创业神器导航', url: 'https://hao.logosc.cn/', icon: '🚀' },
+                    { name: 'UZER云应用', url: 'https://uzer.me/z/apps', icon: '☁️' },
+                    { name: '网易见外', url: 'https://jianwai.youdao.com/', icon: '🎙️' },
+                    { name: '讯飞快读', url: 'https://www.ffkuaidu.com/', icon: '🔊' },
+                    { name: '在线语音合成', url: 'http://www.zaixianai.cn/', icon: '🗣️' },
+                    { name: '遇见数据仓库', url: 'https://met.red/', icon: '📊' },
+                    { name: '站长工具', url: 'http://tool.chinaz.com/', icon: '🔧' },
+                    { name: 'IP地址查询', url: 'https://www.ip138.com/', icon: '🌐' },
+                    { name: '猫啃网字体', url: 'https://www.maoken.com/', icon: '🔤' },
+                    { name: 'LDTools', url: 'https://ldtstore.com.cn/ldtools/', icon: '🛠️' },
+                    { name: '屏库', url: 'https://www.panelook.cn/', icon: '📱' },
+                    { name: '克隆窝', url: 'https://www.kelongwo.com/', icon: '🔄' },
+                    { name: 'MSDN下载', url: 'https://next.itellyou.cn/', icon: '💿' },
+                    { name: '明道云', url: 'https://www.mingdao.com/', icon: '☁️' },
+                    { name: 'YouTube下载', url: 'https://yt1s.is/convert', icon: '📥' },
+                    { name: '几何指南', url: 'https://jihezn.com/', icon: '📐' },
+                    { name: '立创开源', url: 'https://oshwhub.com/', icon: '⚡' },
+                    { name: '电子发烧友', url: 'https://www.elecfans.com/', icon: '🔌' },
+                    { name: '金山文档', url: 'https://www.kdocs.cn/', icon: '📄' },
+                    { name: '歌曲宝', url: 'https://www.gequbao.com/', icon: '🎵' },
+                    { name: 'Coze AI', url: 'https://www.coze.cn/', icon: '🤖' },
+                    { name: '立创EDA', url: 'https://pro.lceda.cn/editor', icon: '⚡' },
+                    { name: 'Linux.do', url: 'https://linux.do/', icon: '🐧' },
+                    { name: 'MD2Card', url: 'https://md2card.cn/zh/editor', icon: '📇' },
+                    { name: 'iMockup', url: 'https://www.imockup.app/zh', icon: '📱' },
+                    { name: 'Hackaday', url: 'https://hackaday.io/feed', icon: '🔧' },
+                    { name: '图片工具', url: 'https://imagestool.com/zh_CN/', icon: '🖼️' }
+                ]
+            },
+            {
+                name: '政府官网',
+                icon: '🏛️',
+                links: [
+                    { name: '开放广东', url: 'http://gddata.gd.gov.cn/', icon: '🏢' },
+                    { name: '中国政府网', url: 'http://www.gov.cn/', icon: '🏛️' },
+                    { name: '国家中医药局', url: 'http://www.satcm.gov.cn/', icon: '💊' },
+                    { name: '中国铁路', url: 'http://www.china-railway.com.cn/', icon: '🚄' },
+                    { name: '交通运输部', url: 'http://www.mot.gov.cn/', icon: '🚗' },
+                    { name: '司法部', url: 'http://www.moj.gov.cn/', icon: '⚖️' },
+                    { name: '国家统计局', url: 'http://www.stats.gov.cn/', icon: '📊' },
+                    { name: '广东教育考试院', url: 'http://eea.gd.gov.cn/', icon: '📝' },
+                    { name: '广东政务服务', url: 'https://www.gdzwfw.gov.cn/', icon: '🏢' },
+                    { name: '网信办', url: 'http://www.cac.gov.cn/', icon: '🌐' },
+                    { name: '工信部', url: 'http://www.miit.gov.cn/', icon: '🏭' },
+                    { name: '会计资格评价', url: 'http://kzp.mof.gov.cn/', icon: '💰' },
+                    { name: '中国教育考试网', url: 'http://www.neea.edu.cn/', icon: '📚' },
+                    { name: '教师资格考试', url: 'https://ntce.neea.edu.cn/', icon: '👨‍🏫' },
+                    { name: '四六级报名', url: 'https://cet-bm.neea.edu.cn/', icon: '📖' },
+                    { name: '学信网', url: 'https://www.chsi.com.cn/', icon: '🎓' },
+                    { name: '助学贷款', url: 'https://sls.cdb.com.cn/', icon: '💳' },
+                    { name: '潮汐表', url: 'https://www.cnss.com.cn/tide/', icon: '🌊' },
+                    { name: '企业信用查询', url: 'http://www.gsxt.gov.cn/', icon: '🔍' },
+                    { name: '软考网', url: 'https://www.ruankao.org.cn/', icon: '💻' },
+                    { name: '广东人社厅', url: 'https://ggfw.gdhrss.gov.cn/', icon: '👥' },
+                    { name: '全国标准平台', url: 'https://std.samr.gov.cn/', icon: '📋' },
+                    { name: '外交部', url: 'https://www.fmprc.gov.cn/', icon: '🌍' },
+                    { name: '审计署', url: 'https://www.audit.gov.cn/', icon: '📊' },
+                    { name: '专利检索', url: 'https://pss-system.cponline.cnipa.gov.cn/', icon: '💡' },
+                    { name: '企业信用公示', url: 'https://shiming.gsxt.gov.cn/', icon: '🏢' }
+                ]
+            },
+
+            {
+                name: '3D打印',
+                icon: '🖨️',
+                links: [
+                    { name: 'MetaHub模型', url: 'https://3dmetahub.com/', icon: '📦' },
+                    { name: 'Bambu Lab Wiki', url: 'https://wiki.bambulab.com/zh/home', icon: '📖' },
+                    { name: 'MakerWorld', url: 'https://makerworld.com/zh', icon: '🌍' },
+                    { name: 'MakerWorld中国', url: 'https://makerworld.com.cn/zh', icon: '🇨🇳' },
+                    { name: '打印啦', url: 'https://www.dayin.la/', icon: '🖨️' },
+                    { name: 'Printables', url: 'https://www.printables.com/', icon: '📐' },
+                    { name: '腾讯混元3D', url: 'https://3d.hunyuan.tencent.com/', icon: '🎨' }
+                ]
+            },
+            {
+                name: 'AI工具',
+                icon: '🤖',
+                links: [
+                    { name: '通义千问', url: 'https://tongyi.aliyun.com/', icon: '🧠' },
+                    { name: 'fast.ai', url: 'https://www.fast.ai/', icon: '⚡' },
+                    { name: '生成式AI教程', url: 'https://microsoft.github.io/generative-ai-for-beginners/', icon: '📚' },
+                    { name: 'ShowMeAI', url: 'https://www.showmeai.tech/', icon: '🎯' },
+                    { name: 'AIbase基地', url: 'https://www.aibase.com/zh', icon: '🏠' },
+                    { name: 'WaytoAGI', url: 'https://www.waytoagi.com/', icon: '🛤️' },
+                    { name: '即梦AI', url: 'https://jimeng.jianying.com/', icon: '🎨' },
+                    { name: 'DeepSeek', url: 'https://www.deepseek.com/', icon: '🔍' },
+                    { name: 'Qwen通义', url: 'https://chat.qwenlm.ai/', icon: '💬' },
+                    { name: 'DeepSeek集成', url: 'https://github.com/deepseek-ai/awesome-deepseek-integration/', icon: '🔗' },
+                    { name: '扣子Coze', url: 'https://www.coze.cn/', icon: '🤖' },
+                    { name: '端脑云', url: 'https://cephalon.cloud/', icon: '☁️' },
+                    { name: 'Atypica AI', url: 'https://atypica.musedam.cc/', icon: '🎭' },
+                    { name: '无限邮', url: 'https://www.2925.com/', icon: '📬' },
+                    { name: 'MCP广场', url: 'https://www.modelscope.cn/mcp', icon: '🏪' },
+                    { name: 'Mermaid图表', url: 'https://mermaid.js.org/', icon: '📊' },
+                    { name: 'DeepWiki', url: 'https://deepwiki.com/', icon: '📖' },
+                    { name: 'MotionGen', url: 'https://motiongen.io/', icon: '🎬' },
+                    { name: 'GemDesign', url: 'https://design.gemcoder.com/', icon: '💎' },
+                    { name: 'Kimi', url: 'https://www.kimi.com/', icon: '🌙' }
+                ]
+            }
+        ];
+
+        let currentCategory = 0;
+
+        // 渲染导航菜单
+        function renderNav() {
+            const menu = document.getElementById('nav-menu');
+            menu.innerHTML = categories.map((cat, i) => `
+                <div class="nav-item ${i === currentCategory ? 'active' : ''}" data-index="${i}">
+                    <span class="icon">${cat.icon}</span>
+                    <span class="text">${cat.name}</span>
+                </div>
+            `).join('');
+
+            menu.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    currentCategory = parseInt(item.dataset.index);
+                    renderNav();
+                    scrollToCategory(currentCategory);
+                });
+            });
+        }
+
+        // 渲染搜索头部
+        function renderSearchHeader() {
+            const header = document.getElementById('searchHeader');
+            header.innerHTML = `
+                <div class="search-container">
+                    <form class="search-form" id="searchForm" action="https://www.bing.com/search" method="get" target="_blank">
+                        <input type="text" class="search-box" name="q" placeholder="🔍 必应搜索..." autocomplete="off">
+                        <button type="submit" class="search-btn">
+                            <span>搜索</span>
+                            <span>🔎</span>
+                        </button>
+                    </form>
+                    <div class="search-engines">
+                        <button type="button" class="engine-btn active" data-engine="bing">必应</button>
+                        <button type="button" class="engine-btn" data-engine="google">谷歌</button>
+                        <button type="button" class="engine-btn" data-engine="baidu">百度</button>
+                        <button type="button" class="engine-btn" data-engine="github">GitHub</button>
+                    </div>
+                </div>
+            `;
+
+            // 搜索引擎切换
+            const engineBtns = header.querySelectorAll('.engine-btn');
+            const searchForm = document.getElementById('searchForm');
+            const searchBox = searchForm.querySelector('.search-box');
+
+            const engines = {
+                bing: { action: 'https://www.bing.com/search', param: 'q', placeholder: '🔍 必应搜索...' },
+                google: { action: 'https://www.google.com/search', param: 'q', placeholder: '🔍 谷歌搜索...' },
+                baidu: { action: 'https://www.baidu.com/s', param: 'wd', placeholder: '🔍 百度搜索...' },
+                github: { action: 'https://github.com/search', param: 'q', placeholder: '🔍 GitHub搜索...' }
+            };
+
+            engineBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    engineBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    
+                    const engine = engines[btn.dataset.engine];
+                    searchForm.action = engine.action;
+                    searchBox.name = engine.param;
+                    searchBox.placeholder = engine.placeholder;
+                });
+            });
+        }
+
+        // 渲染内容
+        function renderContent() {
+            const content = document.getElementById('content');
+
+            content.innerHTML = `
+                ${categories.map((cat, i) => `
+                    <section class="category-section" id="category-${i}" style="animation-delay: ${i * 0.1}s">
+                        <div class="category-header">
+                            <h2>${cat.icon} ${cat.name}</h2>
+                            <span class="count">${cat.links.length} 个网站</span>
+                        </div>
+                        <div class="links-grid">
+                            ${cat.links.map(link => `
+                                <div class="link-card">
+                                    <a href="${link.url}" target="_blank">
+                                        <div class="link-icon">${link.icon}</div>
+                                        <div class="link-info">
+                                            <div class="link-name">${link.name}</div>
+                                            <div class="link-url">${new URL(link.url).hostname}</div>
+                                        </div>
+                                    </a>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </section>
+                `).join('')}
+            `;
+        }
+
+        function scrollToCategory(index) {
+            const el = document.getElementById(`category-${index}`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 移动端菜单
+        const menuToggle = document.getElementById('menuToggle');
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+
+        menuToggle.addEventListener('click', () => {
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('active');
+        });
+
+        overlay.addEventListener('click', () => {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('active');
+        });
+
+        // 点击导航项后关闭侧边栏（移动端）
+        document.getElementById('nav-menu').addEventListener('click', (e) => {
+            if (window.innerWidth <= 768 && e.target.closest('.nav-item')) {
+                sidebar.classList.remove('open');
+                overlay.classList.remove('active');
+            }
+        });
+
+        // 初始化
+        renderNav();
+        renderSearchHeader();
+        renderContent();
+    </script>
+</body>
+</html>
